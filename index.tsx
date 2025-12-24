@@ -39,6 +39,7 @@ const dom = {
   winMsg: document.getElementById('win-msg'),
   diffBtns: document.querySelectorAll('.diff-btn'),
   retryBtns: [document.getElementById('retry-win-btn'), document.getElementById('retry-lost-btn')],
+  gridLoader: document.getElementById('grid-loader'),
   icons: {
     logo: document.getElementById('logo-icon'),
     timer: document.getElementById('timer-icon'),
@@ -55,37 +56,14 @@ let timerInterval: number | null = null;
 const init = () => {
   setupIcons();
   attachEventListeners();
-  renderInitialState();
+  updateUI();
+  // Automatically start first game after a tiny delay to ensure DOM is ready
+  setTimeout(startGame, 500);
 };
 
-const setupIcons = async () => {
-  const { Zap, Timer, Search, RefreshCw, Trophy, Skull } = await import('lucide-react');
-  
-  const iconMap: Record<string, any> = {
-    logo: Zap,
-    timer: Timer,
-    search: Search,
-    btn: Search,
-    trophy: Trophy,
-    skull: Skull
-  };
-
-  Object.entries(iconMap).forEach(([key, Icon]) => {
-    const el = (dom.icons as any)[key];
-    if (el) {
-      el.innerHTML = '';
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      const icon = new Icon({ size: key === 'trophy' || key === 'skull' ? 40 : (key === 'logo' ? 24 : 18) });
-      el.appendChild(icon[0] || icon); // Handle lucide return types
-      // Actually simpler to just use innerHTML with string literals if we had them, 
-      // but lucide-react in ESM usually exports components. 
-      // Let's use standard lucide-web approach for simplicity in vanilla.
-      el.innerHTML = Icon.toString(); // Fallback if necessary
-    }
-  });
-
-  // Re-fill specific icons manually for better reliability
-  dom.icons.logo!.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-zap text-yellow-400"><path d="M4 14.5a1 1 0 0 1-1-1 4 4 0 0 1 4-4h3a2 2 0 0 0 2-2V4a1 1 0 0 1 1.9-.45l7 10a1 1 0 0 1-.8 1.55h-3a2 2 0 0 0-2 2v3.5a1 1 0 0 1-1.9.45l-7-10Z"/></svg>`;
+const setupIcons = () => {
+  // Direct SVG injections for vanilla reliability
+  dom.icons.logo!.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-zap"><path d="M4 14.5a1 1 0 0 1-1-1 4 4 0 0 1 4-4h3a2 2 0 0 0 2-2V4a1 1 0 0 1 1.9-.45l7 10a1 1 0 0 1-.8 1.55h-3a2 2 0 0 0-2 2v3.5a1 1 0 0 1-1.9.45l-7-10Z"/></svg>`;
   dom.icons.timer!.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-timer"><line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/></svg>`;
   dom.icons.search!.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`;
   dom.icons.btn!.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-zap"><path d="M4 14.5a1 1 0 0 1-1-1 4 4 0 0 1 4-4h3a2 2 0 0 0 2-2V4a1 1 0 0 1 1.9-.45l7 10a1 1 0 0 1-.8 1.55h-3a2 2 0 0 0-2 2v3.5a1 1 0 0 1-1.9.45l-7-10Z"/></svg>`;
@@ -95,7 +73,7 @@ const setupIcons = async () => {
 
 const attachEventListeners = () => {
   dom.startBtn!.addEventListener('click', startGame);
-  dom.themeInput!.addEventListener('change', (e) => state.theme = (e.target as HTMLInputElement).value);
+  dom.themeInput!.addEventListener('input', (e) => state.theme = (e.target as HTMLInputElement).value);
   
   dom.diffBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -108,8 +86,6 @@ const attachEventListeners = () => {
   });
 
   dom.retryBtns.forEach(btn => btn!.addEventListener('click', startGame));
-
-  // Global Grid events for drag selection
   window.addEventListener('mouseup', handleMouseUp);
 };
 
@@ -136,6 +112,7 @@ const startGame = async () => {
     startTimer();
     updateUI();
   } catch (e) {
+    console.error("Game Start Error", e);
     state.isLoading = false;
     updateUI();
   }
@@ -222,11 +199,6 @@ const checkSelection = () => {
   state.selection = [];
 };
 
-// UI Renderers
-const renderInitialState = () => {
-  updateUI();
-};
-
 const updateUI = () => {
   // Overlays
   dom.winOverlay!.classList.toggle('hidden', state.status !== GameStatus.WON);
@@ -261,9 +233,9 @@ const updateUI = () => {
 
   // Button state
   dom.startBtn!.classList.toggle('bg-slate-700', state.isLoading);
-  dom.icons.btn!.classList.toggle('animate-spin', state.isLoading);
+  dom.startBtn!.classList.toggle('bg-blue-600', !state.isLoading);
   dom.icons.btn!.innerHTML = state.isLoading 
-    ? `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>`
+    ? `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`
     : `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-zap"><path d="M4 14.5a1 1 0 0 1-1-1 4 4 0 0 1 4-4h3a2 2 0 0 0 2-2V4a1 1 0 0 1 1.9-.45l7 10a1 1 0 0 1-.8 1.55h-3a2 2 0 0 0-2 2v3.5a1 1 0 0 1-1.9.45l-7-10Z"/></svg>`;
 
   renderGrid();
@@ -271,15 +243,25 @@ const updateUI = () => {
 };
 
 const renderGrid = () => {
+  if (state.isLoading) {
+    dom.grid!.innerHTML = `
+      <div class="col-span-10 h-64 flex flex-col items-center justify-center text-slate-500">
+        <svg class="animate-spin h-8 w-8 mb-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        <p class="text-xs font-black uppercase tracking-[0.2em] animate-pulse">Analyzing Terrain...</p>
+      </div>
+    `;
+    return;
+  }
+
   if (state.grid.length === 0) return;
   
-  // Re-rendering whole grid only when new game starts
-  if (dom.grid!.children.length !== 100) {
+  // Re-build grid if it's empty or wrong size
+  if (dom.grid!.querySelectorAll('.grid-cell').length !== 100) {
     dom.grid!.innerHTML = '';
     state.grid.forEach((row, r) => {
       row.forEach((char, c) => {
         const cell = document.createElement('div');
-        cell.className = 'aspect-square flex items-center justify-center text-sm md:text-base font-black rounded-lg cursor-pointer transition-all duration-100 grid-letter';
+        cell.className = 'grid-cell aspect-square flex items-center justify-center text-sm md:text-base font-black rounded-lg cursor-pointer transition-all duration-100 grid-letter';
         cell.textContent = char;
         cell.dataset.r = r.toString();
         cell.dataset.c = c.toString();
@@ -295,9 +277,9 @@ const renderGrid = () => {
 };
 
 const updateGridCells = () => {
-  const cells = dom.grid!.children;
-  for (let i = 0; i < cells.length; i++) {
-    const cell = cells[i] as HTMLElement;
+  const cells = dom.grid!.querySelectorAll('.grid-cell');
+  cells.forEach(cellEl => {
+    const cell = cellEl as HTMLElement;
     const r = parseInt(cell.dataset.r!);
     const c = parseInt(cell.dataset.c!);
     
@@ -305,16 +287,25 @@ const updateGridCells = () => {
     const isFound = state.words.some(w => w.found && w.positions.some(p => p.r === r && p.c === c));
     
     cell.className = `
-      aspect-square flex items-center justify-center text-sm md:text-base font-black rounded-lg cursor-pointer transition-all duration-100 grid-letter
+      grid-cell aspect-square flex items-center justify-center text-sm md:text-base font-black rounded-lg cursor-pointer transition-all duration-100 grid-letter
       ${isSelected ? 'bg-blue-500 text-white scale-[1.15] z-10 shadow-xl' : ''}
       ${isFound ? 'bg-emerald-500/20 text-emerald-400' : ''}
       ${!isSelected && !isFound ? 'hover:bg-slate-800 text-slate-500' : ''}
     `;
-  }
+  });
 };
 
 const renderWordList = () => {
-  if (state.words.length === 0 && !state.isLoading) {
+  if (state.isLoading) {
+    dom.wordList!.innerHTML = `
+      <div class="col-span-2 text-center py-6 border-2 border-dashed border-slate-800 rounded-[2rem] opacity-50">
+        <p class="text-slate-700 text-[10px] font-black uppercase tracking-widest animate-pulse">Scouting Targets...</p>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.words.length === 0) {
     dom.wordList!.innerHTML = `
       <div class="col-span-2 text-center py-6 border-2 border-dashed border-slate-800 rounded-[2rem]">
         <p class="text-slate-700 text-[10px] font-black uppercase tracking-widest">Awaiting Mission Intel</p>
