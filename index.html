@@ -1,0 +1,125 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Word Blitz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            overflow-x: hidden;
+            user-select: none;
+        }
+        .grid-letter {
+            font-family: 'JetBrains+Mono', monospace;
+        }
+        .zoom-in {
+            animation: zoomIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes zoomIn {
+          from { opacity: 0; transform: scale(0.9); }
+          to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+    <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react/": "https://esm.sh/react@^19.2.3/"
+  }
+}
+</script>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+    <div id="app" class="w-full max-w-md flex flex-col items-center">
+        <!-- Header -->
+        <div class="w-full mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div id="logo-icon"></div>
+                <h1 class="text-2xl font-black tracking-tighter italic">GEMINI BLITZ</h1>
+            </div>
+            <div class="text-right">
+                <p class="text-[10px] text-slate-500 uppercase font-black tracking-widest">Global Score</p>
+                <p id="score-display" class="text-2xl font-mono text-emerald-400 font-bold leading-none">00000</p>
+            </div>
+        </div>
+
+        <!-- Main Game Card -->
+        <div class="w-full bg-slate-800 rounded-[2.5rem] p-6 shadow-2xl border border-slate-700 relative overflow-hidden">
+            <!-- Progress Bar -->
+            <div class="h-1.5 w-full bg-slate-900/50 absolute top-0 left-0">
+                <div id="timer-bar" class="h-full transition-all duration-1000 ease-linear bg-blue-500" style="width: 100%"></div>
+            </div>
+
+            <!-- Controls -->
+            <div class="flex flex-col gap-4 mb-6 mt-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-2 bg-slate-900/80 px-4 py-2 rounded-2xl border border-slate-700/50">
+                        <div id="timer-icon"></div>
+                        <span id="timer-text" class="font-mono text-xl font-black text-blue-400">25<span class="text-xs ml-0.5">s</span></span>
+                    </div>
+                    
+                    <div id="difficulty-selector" class="flex items-center gap-1 bg-slate-900/50 p-1 rounded-2xl border border-slate-700/50">
+                        <button data-difficulty="EASY" class="diff-btn px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all text-slate-500 hover:text-slate-300">Easy</button>
+                        <button data-difficulty="MEDIUM" class="diff-btn px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all bg-blue-600 text-white shadow-lg">Medium</button>
+                        <button data-difficulty="HARD" class="diff-btn px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all text-slate-500 hover:text-slate-300">Hard</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <div class="relative flex-1">
+                        <input id="theme-input" type="text" value="Space" class="w-full bg-slate-900/80 border border-slate-700/50 rounded-2xl pl-10 pr-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder:text-slate-600" placeholder="Enter theme...">
+                        <div id="search-icon" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"></div>
+                    </div>
+                    <button id="start-btn" class="p-3.5 bg-blue-600 hover:bg-blue-500 rounded-2xl transition-all shadow-lg active:scale-95 flex items-center justify-center min-w-[50px]">
+                        <div id="btn-icon"></div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Grid Shell -->
+            <div id="grid-container" class="grid grid-cols-10 gap-1 bg-slate-900 p-2.5 rounded-[2rem] touch-none select-none border border-slate-700/30">
+                <div class="col-span-10 h-64 flex flex-col items-center justify-center text-slate-600 p-8 text-center">
+                    <p class="text-sm font-bold uppercase tracking-widest opacity-40">Ready to Blitz?</p>
+                </div>
+            </div>
+
+            <!-- Overlays -->
+            <div id="win-overlay" class="hidden absolute inset-0 bg-slate-900/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center zoom-in">
+                <div id="trophy-icon" class="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.4)]"></div>
+                <h2 class="text-4xl font-black mb-2 tracking-tighter">FLAWLESS!</h2>
+                <p id="win-msg" class="text-slate-400 mb-8 font-medium">Found all words!</p>
+                <button id="retry-win-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-2xl font-black tracking-widest uppercase transition-all shadow-xl">Next Blitz</button>
+            </div>
+
+            <div id="lost-overlay" class="hidden absolute inset-0 bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center zoom-in">
+                <div id="skull-icon" class="w-20 h-20 bg-rose-500 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(244,63,94,0.4)]"></div>
+                <h2 class="text-4xl font-black mb-2 tracking-tighter uppercase">Defeated</h2>
+                <p class="text-slate-400 mb-8 font-medium">The clock won this time.</p>
+                <button id="retry-lost-btn" class="w-full bg-slate-700 hover:bg-slate-600 py-4 rounded-2xl font-black tracking-widest uppercase transition-all shadow-xl">Try Again</button>
+            </div>
+        </div>
+
+        <!-- Word List -->
+        <div class="w-full max-w-md mt-8">
+            <div class="flex justify-between items-end mb-4 px-2">
+                <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Target List</h3>
+                <div id="difficulty-badge" class="text-[10px] font-black uppercase px-2 py-0.5 rounded-md border border-amber-500/30 text-amber-400 bg-amber-500/10">MEDIUM Mode</div>
+            </div>
+            <div id="word-list" class="grid grid-cols-2 gap-2"></div>
+        </div>
+
+        <footer class="mt-auto py-8 text-slate-700 text-[10px] font-black uppercase tracking-[0.3em]">
+            Rapid • Search • Protocol
+        </footer>
+    </div>
+    <script type="module" src="index.tsx"></script>
+</body>
+</html>
